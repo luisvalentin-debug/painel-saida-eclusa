@@ -445,12 +445,13 @@ def base_css() -> str:
     .alert-card.chegada{border-top:5px solid #ffb000;}
     .alert-card.indicador{border-top:5px solid #f04438;}
     .alert-card.janela{border-top:5px solid #ff7a00;}
-    .card-head{display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:4px;}
-    .card-title{font-size:14px; font-weight:950; display:flex; align-items:center; gap:6px; white-space:nowrap;}
+    .card-head{display:flex; align-items:center; justify-content:space-between; gap:6px; margin-bottom:4px;}
+    .card-title{font-size:13px; font-weight:950; display:flex; align-items:center; gap:5px; white-space:nowrap; min-width:0; overflow:hidden; text-overflow:ellipsis; flex:1 1 auto;}
     .chegada .card-title{color:#f2a100}.indicador .card-title{color:#ef233c}.janela .card-title{color:#ff7a00}
-    .metrics-inline{display:flex; align-items:center; justify-content:flex-end; gap:6px; flex-wrap:nowrap;}
-    .metric-mini{background:var(--card2); border:1px solid var(--border); border-radius:10px; padding:7px 13px; min-width:92px; text-align:center; font-size:12px; font-weight:850; color:var(--muted); white-space:nowrap;}
-    .metric-mini b{font-size:18px; color:var(--text); margin-left:5px;}
+    .metrics-inline{display:flex; align-items:center; justify-content:flex-end; gap:4px; flex:0 0 auto; flex-wrap:nowrap;}
+    .metric-mini{background:var(--card2); border:1px solid var(--border); border-radius:10px; padding:6px 8px; min-width:66px; text-align:center; font-size:10.5px; font-weight:850; color:var(--muted); white-space:nowrap;}
+    .metric-mini:last-child{min-width:82px;}
+    .metric-mini b{font-size:14px; color:var(--text); margin-left:3px;}
     .mini-table{width:100%; border-collapse:collapse; font-size:12px;}
     .mini-scroll{max-height:172px; overflow-y:auto; padding-right:2px;}
     .mini-scroll::-webkit-scrollbar,.table-card::-webkit-scrollbar{width:10px;height:10px;}
@@ -653,6 +654,15 @@ def base_css() -> str:
     .daily-impact-table .total-janela{background:#fff3b0 !important; color:#7a4b00 !important; font-weight:950; border-left:1px solid var(--border);}
     .daily-impact-table .total-indicador{background:#e7f1ff !important; color:var(--blue2) !important; font-weight:950;}
 
+
+    @media (max-width: 1500px){
+        .card-title{font-size:12px;}
+        .metric-mini{min-width:58px; padding:5px 6px; font-size:10px;}
+        .metric-mini:last-child{min-width:76px;}
+        .metric-mini b{font-size:13px;}
+        .badge{font-size:10px; padding:3px 7px;}
+    }
+
     @media (min-width: 1800px){
         .title{font-size:38px}.subtitle{font-size:20px}.filter-value{font-size:18px}.card-title{font-size:16px}
         table.main-table{font-size:16px}.main-table th{font-size:14px}.mini-table{font-size:15px}.badge{font-size:13px;padding:5px 10px;}
@@ -664,7 +674,8 @@ def base_css() -> str:
 def badge_modal(modal: str) -> str:
     m = clean_modal(modal)
     cls = {"VENDA": "modal-venda", "TRANSFERÊNCIA": "modal-transferencia", "ABA": "modal-aba"}.get(m, "")
-    return f'<span class="badge {cls}">{m}</span>'
+    label = "TRANSF" if m == "TRANSFERÊNCIA" else m
+    return f'<span class="badge {cls}">{label}</span>'
 
 
 def badge_status(status: str, tempo: str | None = None) -> str:
@@ -1152,7 +1163,7 @@ st.markdown(render_venda_indicador_dia(f), unsafe_allow_html=True)
 # Legendas e rodapé compactos
 st.markdown(f"""
 <div class="legends">
-    <div class="legend-card"><div class="legend-inline"><span class="legend-title">MODAL</span> <span class="badge modal-venda">VENDA</span> <span class="badge modal-transferencia">TRANSFERÊNCIA</span> <span class="badge modal-aba">ABA</span></div></div>
+    <div class="legend-card"><div class="legend-inline"><span class="legend-title">MODAL</span> <span class="badge modal-venda">VENDA</span> <span class="badge modal-transferencia">TRANSF</span> <span class="badge modal-aba">ABA</span></div></div>
     <div class="legend-card"><div class="legend-inline"><span class="legend-title">STATUS</span> <span class="badge st-ok">NO PRAZO</span> <span class="badge st-aguardando">AGUARDANDO</span> <span class="badge st-atencao">PONTO DE ATENÇÃO</span> <span class="badge st-chegada">ATRASO CHEGADA</span> <span class="badge st-atraso">ATRASO SAÍDA</span></div></div>
     <div class="legend-card"><div class="legend-inline"><span class="legend-title">PERÍODO</span> <span><span class="dot amanha"></span>AMANHÃ</span> <span><span class="dot hoje"></span>HOJE</span> <span><span class="dot anterior"></span>ANTERIORES</span></div></div>
 </div>
