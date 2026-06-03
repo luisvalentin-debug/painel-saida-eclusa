@@ -461,7 +461,8 @@ def base_css() -> str:
     .mini-table td{padding:4px 6px; border-bottom:1px solid rgba(128,128,128,.16); color:var(--text); font-weight:650;}
     .mini-table tr:last-child td{border-bottom:none;}
 
-    .table-card{background:var(--card); border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow); padding:0; overflow:auto; height:72vh; position:relative; z-index:1; contain:paint; margin-top:5px;}
+    .table-card{background:var(--card); border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow); padding:0; overflow:auto; height:72vh; position:relative; z-index:1; contain:paint; margin-top:5px; margin-bottom:22px; clear:both;}
+    div[data-testid="stExpander"]{margin-top:14px !important; clear:both !important;}
     table.main-table{width:100%; border-collapse:separate; border-spacing:0; font-size:13px;}
     .main-table thead{position:static; background:var(--soft);}
     .main-table th{position:sticky; top:0; z-index:20; background:var(--soft) !important; color:var(--blue2); padding:8px 7px; text-align:left; font-size:12px; font-weight:950; border-bottom:1px solid var(--border); box-shadow:0 3px 7px rgba(0,0,0,.08);}
@@ -483,7 +484,8 @@ def base_css() -> str:
     .st-chegada{color:#c55300; background:#fff0e5; border-color:#ffb47a;}
     .st-atraso{color:#c1121f; background:#ffe7e9; border-color:#ff9aa2;}
 
-    .daily-impact{background:var(--card); border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow); padding:9px 12px; margin-top:9px;}
+    .after-main-table-spacer{height:8px; clear:both;}
+    .daily-impact{background:var(--card); border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow); padding:9px 12px; margin-top:9px; clear:both;}
     .daily-impact-title{font-size:15px; font-weight:950; color:var(--blue2); margin-bottom:2px;}
     .daily-impact-subtitle{font-size:12px; color:var(--muted); font-weight:700; margin-bottom:6px;}
     .daily-impact-scroll{overflow-x:auto; width:100%;}
@@ -807,10 +809,13 @@ def heat_class(v: int) -> str:
 
 
 
-def render_status_cargas_dia(df: pd.DataFrame, modal_filtro: str = "Todos", turno_filtro: str = "Todos") -> str:
+def render_status_cargas_dia(df: pd.DataFrame, modal_filtro: str = "Todos", turno_filtro: str = "Todos", datas_filtro=None) -> str:
     """Painel independente: status operacional por dia, com filtros próprios de Modal e Turno."""
     base_status = df.copy()
     base_status = base_status[base_status["Janela"].notna()].copy()
+    if datas_filtro:
+        datas_norm = set(pd.to_datetime(datas_filtro).date)
+        base_status = base_status[base_status["Janela"].dt.date.isin(datas_norm)].copy()
 
     if modal_filtro != "Todos":
         base_status = base_status[base_status["Modal"].astype(str).eq(modal_filtro)]
@@ -1257,17 +1262,23 @@ st.markdown(f"""
 
 # Tabela principal
 st.markdown(render_main_table(f), unsafe_allow_html=True)
+st.markdown("<div class='after-main-table-spacer'></div>", unsafe_allow_html=True)
 
 # Painel independente de status das cargas por dia
 with st.expander("📦 Status das cargas por dia", expanded=True):
-    ps1, ps2 = st.columns([1, 1])
+    ps1, ps2, ps3 = st.columns([1, 1, 1.4])
     with ps1:
         modal_status_options = ["Todos"] + sorted(base["Modal"].dropna().astype(str).unique().tolist())
         modal_status_sel = st.selectbox("Modal do painel status", modal_status_options, index=modal_status_options.index("VENDA") if "VENDA" in modal_status_options else 0, key="modal_status_dia")
     with ps2:
         turno_status_options = ["Todos"] + sorted(base["Turno"].dropna().astype(str).unique().tolist())
         turno_status_sel = st.selectbox("Turno do painel status", turno_status_options, key="turno_status_dia")
-    st.markdown(render_status_cargas_dia(base, modal_status_sel, turno_status_sel), unsafe_allow_html=True)
+    with ps3:
+        datas_status = sorted(base.loc[base["Janela"].notna(), "Janela"].dt.date.unique(), reverse=True)
+        datas_status_options = [pd.Timestamp(d).strftime("%d/%m/%Y") for d in datas_status]
+        datas_status_sel_txt = st.multiselect("Data Janela do painel status", datas_status_options, default=datas_status_options, key="data_status_dia")
+        datas_status_sel = [pd.to_datetime(x, dayfirst=True).date() for x in datas_status_sel_txt]
+    st.markdown(render_status_cargas_dia(base, modal_status_sel, turno_status_sel, datas_status_sel), unsafe_allow_html=True)
 
 # Matriz adicional abaixo da tabela, sem reduzir os quadros principais
 st.markdown(render_venda_turno_impact(f), unsafe_allow_html=True)
