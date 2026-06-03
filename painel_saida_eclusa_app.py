@@ -492,6 +492,16 @@ def base_css() -> str:
     .daily-impact-table td{padding:6px 5px; border-bottom:1px solid rgba(128,128,128,.14); text-align:center; font-weight:900; color:#0b2341;}
     .daily-impact-table .data-cell{background:var(--soft); color:var(--blue2); font-weight:950; text-align:center; min-width:62px; font-size:11px;}
     .daily-impact-table .total-cell{background:#e7f1ff !important; color:var(--blue2) !important; font-weight:950; border-left:1px solid var(--border);}
+
+    .status-kpis{display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin:8px 0 8px 0;}
+    .status-kpi{border:1px solid var(--border); border-radius:10px; padding:8px 10px; background:rgba(255,255,255,.55); display:flex; align-items:center; justify-content:space-between; font-weight:900;}
+    .status-kpi span{font-size:11px; color:var(--muted);}
+    .status-kpi b{font-size:18px; color:var(--blue2);}
+    .status-kpi.aguardando b{color:#d97706;}
+    .status-kpi.carregando b{color:#0b74de;}
+    .status-kpi.liberadas b{color:#00a650;}
+    .status-kpi.pct b{color:#00a650;}
+    .status-day-table .pct-cell{font-weight:950; color:#00a650; background:#effdf5;}
     .heat-0{background:#e9f8ef !important;}
     .heat-1{background:#f2f8d8 !important;}
     .heat-2{background:#fff3b0 !important;}
@@ -795,6 +805,100 @@ def heat_class(v: int) -> str:
         return "heat-3"
     return "heat-4"
 
+
+
+def render_status_cargas_dia(df: pd.DataFrame, modal_filtro: str = "Todos", turno_filtro: str = "Todos") -> str:
+    """Painel independente: status operacional por dia, com filtros próprios de Modal e Turno."""
+    base_status = df.copy()
+    base_status = base_status[base_status["Janela"].notna()].copy()
+
+    if modal_filtro != "Todos":
+        base_status = base_status[base_status["Modal"].astype(str).eq(modal_filtro)]
+    if turno_filtro != "Todos":
+        base_status = base_status[base_status["Turno"].astype(str).eq(turno_filtro)]
+
+    if base_status.empty:
+        return html_join([
+            "<div class='daily-impact'>",
+            "<div class='daily-impact-title'>📦 STATUS DAS CARGAS POR DIA</div>",
+            "<div class='daily-impact-subtitle'>Aguardando veículo, carregando e liberadas por Data Janela.</div>",
+            "<div style='color:var(--muted);padding:14px;text-align:center;font-weight:750;'>Sem cargas para os filtros selecionados</div>",
+            "</div>",
+        ])
+
+    base_status["Data Janela"] = base_status["Janela"].dt.date
+    base_status["Aguardando Veículo"] = base_status["Chegada Portaria"].isna() & base_status["Saida Eclusa"].isna()
+    base_status["Carregando"] = base_status["Chegada Portaria"].notna() & base_status["Saida Eclusa"].isna()
+    base_status["Liberadas"] = base_status["Saida Eclusa"].notna()
+
+    resumo = (
+        base_status.groupby("Data Janela", dropna=True)
+        .agg(
+            AguardandoVeiculo=("Aguardando Veículo", "sum"),
+            Carregando=("Carregando", "sum"),
+            Liberadas=("Liberadas", "sum"),
+            Total=("ID Carga", "count"),
+        )
+        .reset_index()
+        .sort_values("Data Janela", ascending=False)
+    )
+    resumo["PercConcluido"] = resumo.apply(lambda r: (r["Liberadas"] / r["Total"] * 100) if r["Total"] else 0, axis=1)
+
+    total_aguardando = int(resumo["AguardandoVeiculo"].sum())
+    total_carregando = int(resumo["Carregando"].sum())
+    total_liberadas = int(resumo["Liberadas"].sum())
+    total_cargas = int(resumo["Total"].sum())
+    pct_total = (total_liberadas / total_cargas * 100) if total_cargas else 0
+
+    rows = []
+    for _, r in resumo.iterrows():
+        data_txt = pd.Timestamp(r["Data Janela"]).strftime("%d/%m")
+        agu = int(r["AguardandoVeiculo"])
+        carreg = int(r["Carregando"])
+        lib = int(r["Liberadas"])
+        total = int(r["Total"])
+        pct = float(r["PercConcluido"])
+        rows.append(
+            "<tr>"
+            f"<td class='data-cell'>{data_txt}</td>"
+            f"<td class='heat-2'>{agu}</td>"
+            f"<td class='heat-1'>{carreg}</td>"
+            f"<td class='heat-0'>{lib}</td>"
+            f"<td class='total-indicador'>{total}</td>"
+            f"<td class='pct-cell'>{pct:.1f}%</td>"
+            "</tr>"
+        )
+
+    rows.append(
+        "<tr>"
+        "<td class='data-cell'>TOTAL</td>"
+        f"<td class='heat-2'>{total_aguardando}</td>"
+        f"<td class='heat-1'>{total_carregando}</td>"
+        f"<td class='heat-0'>{total_liberadas}</td>"
+        f"<td class='total-indicador'>{total_cargas}</td>"
+        f"<td class='pct-cell'>{pct_total:.1f}%</td>"
+        "</tr>"
+    )
+
+    return html_join([
+        "<div class='daily-impact'>",
+        "<div class='daily-impact-title'>📦 STATUS DAS CARGAS POR DIA</div>",
+        "<div class='daily-impact-subtitle'>Painel independente. Aguardando veículo = sem chegada e sem saída; Carregando = com chegada e sem saída; Liberadas = com saída eclusa.</div>",
+        "<div class='status-kpis'>",
+        f"<div class='status-kpi aguardando'><span>Aguardando veículo</span><b>{total_aguardando}</b></div>",
+        f"<div class='status-kpi carregando'><span>Carregando</span><b>{total_carregando}</b></div>",
+        f"<div class='status-kpi liberadas'><span>Liberadas</span><b>{total_liberadas}</b></div>",
+        f"<div class='status-kpi total'><span>Total</span><b>{total_cargas}</b></div>",
+        f"<div class='status-kpi pct'><span>Concluído</span><b>{pct_total:.1f}%</b></div>",
+        "</div>",
+        "<div class='daily-impact-scroll'>",
+        "<table class='daily-impact-table status-day-table'>",
+        "<thead><tr><th>DATA</th><th>AGUARDANDO VEÍCULO</th><th>CARREGANDO</th><th>LIBERADAS</th><th>TOTAL</th><th>% CONCLUÍDO</th></tr></thead><tbody>",
+        *rows,
+        "</tbody></table>",
+        "</div>",
+        "</div>",
+    ])
 
 def render_venda_turno_impact(df: pd.DataFrame) -> str:
     """Matriz: somente VENDA, linhas por data da Janela e colunas por Turno x Janela/Indicador."""
@@ -1153,6 +1257,17 @@ st.markdown(f"""
 
 # Tabela principal
 st.markdown(render_main_table(f), unsafe_allow_html=True)
+
+# Painel independente de status das cargas por dia
+with st.expander("📦 Status das cargas por dia", expanded=True):
+    ps1, ps2 = st.columns([1, 1])
+    with ps1:
+        modal_status_options = ["Todos"] + sorted(base["Modal"].dropna().astype(str).unique().tolist())
+        modal_status_sel = st.selectbox("Modal do painel status", modal_status_options, index=modal_status_options.index("VENDA") if "VENDA" in modal_status_options else 0, key="modal_status_dia")
+    with ps2:
+        turno_status_options = ["Todos"] + sorted(base["Turno"].dropna().astype(str).unique().tolist())
+        turno_status_sel = st.selectbox("Turno do painel status", turno_status_options, key="turno_status_dia")
+    st.markdown(render_status_cargas_dia(base, modal_status_sel, turno_status_sel), unsafe_allow_html=True)
 
 # Matriz adicional abaixo da tabela, sem reduzir os quadros principais
 st.markdown(render_venda_turno_impact(f), unsafe_allow_html=True)
