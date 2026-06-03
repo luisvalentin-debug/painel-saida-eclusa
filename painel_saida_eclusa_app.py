@@ -24,7 +24,8 @@ st.set_page_config(
 TIMEZONE = "America/Sao_Paulo"
 AUTOREFRESH_SECONDS = 60
 HEADER_ROW_EXCEL = 2  # títulos começam na linha 3 do Excel/Google Sheets
-APP_VERSION = "V25 - correção M³ Google Sheets"
+APP_VERSION = "V33 - link fixo Google Sheets e filtro data status"
+DEFAULT_GOOGLE_SHEETS_URL = "https://docs.google.com/spreadsheets/d/12fMDx0ih2P8LNTRa1EL987GYyPsZv2dDP4iH54Qjun8/edit?gid=2029130478#gid=2029130478"
 
 # =========================
 # FUNÇÕES AUXILIARES
@@ -1084,42 +1085,47 @@ st.markdown(get_theme_css(st.session_state.get("tema_select", "Claro")) + base_c
 # Depois que uma base é carregada, ela fica salva na sessão. Assim o painel começa no topo,
 # sem o bloco de upload ocupando espaço na TV.
 df_raw = None
+# Link padrão fixo: ao abrir o app publicado, qualquer pessoa já acessa a base correta.
+# Se algum dia a planilha mudar, basta alterar esse link no código ou usar o menu lateral para trocar a base.
 if "excel_bytes" in st.session_state:
     df_raw = load_excel(st.session_state["excel_bytes"])
-elif "csv_url" in st.session_state:
-    df_raw = load_google_csv(google_sheets_to_csv_url(st.session_state["csv_url"]))
-
-if df_raw is None:
-    st.markdown("""
-    <div class="topbar" style="margin-top:24px;">
-        <div class="brand">
-            <div class="logo">Magalu</div>
-            <div>
-                <div class="title">PAINEL DE ACOMPANHAMENTO | SAÍDA ECLUSA</div>
-                <div class="subtitle">Carregue o Excel ou conecte o Google Sheets para iniciar</div>
+else:
+    st.session_state.setdefault("csv_url", DEFAULT_GOOGLE_SHEETS_URL)
+    try:
+        df_raw = load_google_csv(google_sheets_to_csv_url(st.session_state["csv_url"]))
+    except Exception as e:
+        st.markdown("""
+        <div class="topbar" style="margin-top:24px;">
+            <div class="brand">
+                <div class="logo">Magalu</div>
+                <div>
+                    <div class="title">PAINEL DE ACOMPANHAMENTO | SAÍDA ECLUSA</div>
+                    <div class="subtitle">Não foi possível carregar o Google Sheets padrão</div>
+                </div>
             </div>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
-    with st.container(border=True):
-        fonte = st.radio("Fonte de dados", ["Upload Excel", "Google Sheets CSV"], horizontal=True)
-        if fonte == "Upload Excel":
-            arquivo = st.file_uploader("Envie o arquivo Excel", type=["xlsx", "xls"])
-            if arquivo is not None:
-                st.session_state["excel_bytes"] = arquivo.getvalue()
-                st.rerun()
-        else:
-            csv_url = st.text_input(
-                "Cole o link da aba do Google Sheets",
-                placeholder="https://docs.google.com/spreadsheets/d/.../edit?gid=...",
-                help="Pode ser o link normal da aba. A planilha precisa estar compartilhada para leitura ou publicada na web."
-            )
-            st.caption("Dica: use o link da aba onde os títulos começam na linha 3.")
-            if csv_url:
-                st.session_state["csv_url"] = csv_url
-                st.session_state.pop("excel_bytes", None)
-                st.rerun()
-    st.stop()
+        """, unsafe_allow_html=True)
+        st.error(f"Erro ao carregar a base: {e}")
+        with st.container(border=True):
+            fonte = st.radio("Fonte de dados", ["Upload Excel", "Google Sheets CSV"], horizontal=True)
+            if fonte == "Upload Excel":
+                arquivo = st.file_uploader("Envie o arquivo Excel", type=["xlsx", "xls"])
+                if arquivo is not None:
+                    st.session_state["excel_bytes"] = arquivo.getvalue()
+                    st.rerun()
+            else:
+                csv_url = st.text_input(
+                    "Cole o link da aba do Google Sheets",
+                    value=st.session_state.get("csv_url", DEFAULT_GOOGLE_SHEETS_URL),
+                    placeholder="https://docs.google.com/spreadsheets/d/.../edit?gid=...",
+                    help="Pode ser o link normal da aba. A planilha precisa estar compartilhada para leitura ou publicada na web."
+                )
+                st.caption("Dica: use o link da aba onde os títulos começam na linha 3.")
+                if csv_url:
+                    st.session_state["csv_url"] = csv_url
+                    st.session_state.pop("excel_bytes", None)
+                    st.rerun()
+        st.stop()
 
 base, faltantes = preparar_base(df_raw)
 if faltantes:
@@ -1276,8 +1282,15 @@ with st.expander("📦 Status das cargas por dia", expanded=True):
     with ps3:
         datas_status = sorted(base.loc[base["Janela"].notna(), "Janela"].dt.date.unique(), reverse=True)
         datas_status_options = [pd.Timestamp(d).strftime("%d/%m/%Y") for d in datas_status]
-        datas_status_sel_txt = st.multiselect("Data Janela do painel status", datas_status_options, default=datas_status_options, key="data_status_dia")
-        datas_status_sel = [pd.to_datetime(x, dayfirst=True).date() for x in datas_status_sel_txt]
+        datas_status_sel_txt = st.multiselect(
+            "Data Janela do painel status",
+            datas_status_options,
+            default=[],
+            placeholder="Todas",
+            key="data_status_dia"
+        )
+        # Quando não selecionar nenhuma data, o painel mostra todas.
+        datas_status_sel = [pd.to_datetime(x, dayfirst=True).date() for x in datas_status_sel_txt] if datas_status_sel_txt else None
     st.markdown(render_status_cargas_dia(base, modal_status_sel, turno_status_sel, datas_status_sel), unsafe_allow_html=True)
 
 # Matriz adicional abaixo da tabela, sem reduzir os quadros principais
@@ -1309,7 +1322,7 @@ with st.sidebar.expander("⚙️ Fonte de dados / trocar base", expanded=False):
     st.caption(f"Fonte atual: {origem}")
     novo_link = st.text_input(
         "Link do Google Sheets",
-        value=st.session_state.get("csv_url", ""),
+        value=st.session_state.get("csv_url", DEFAULT_GOOGLE_SHEETS_URL),
         placeholder="https://docs.google.com/spreadsheets/d/.../edit?gid=...",
         help="Cole o link da aba da planilha. A aba precisa estar compartilhada/publicada para leitura."
     )
