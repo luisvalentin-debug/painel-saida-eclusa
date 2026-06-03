@@ -27,6 +27,60 @@ HEADER_ROW_EXCEL = 2  # títulos começam na linha 3 do Excel/Google Sheets
 APP_VERSION = "V33 - link fixo Google Sheets e filtro data status"
 DEFAULT_GOOGLE_SHEETS_URL = "https://docs.google.com/spreadsheets/d/12fMDx0ih2P8LNTRa1EL987GYyPsZv2dDP4iH54Qjun8/edit?gid=2029130478#gid=2029130478"
 
+
+def get_query_value(nome: str, default: str = "") -> str:
+    """Lê parâmetro da URL. Ex.: ?turno=1%C2%BA&modal=VENDA"""
+    try:
+        valor = st.query_params.get(nome, default)
+        if isinstance(valor, list):
+            valor = valor[0] if valor else default
+        return str(valor).strip()
+    except Exception:
+        return default
+
+
+def normalizar_url_value(valor: str) -> str:
+    return str(valor or "").strip().lower().replace("_", " ").replace("-", " ")
+
+
+def escolher_por_query(options, query_name: str, default_label: str):
+    """Retorna index de selectbox baseado em query param, aceitando texto sem acento/case."""
+    raw = get_query_value(query_name, "")
+    if not raw:
+        return options.index(default_label) if default_label in options else 0
+    alvo = normalizar_url_value(raw)
+    aliases = {
+        "todos": "Todos",
+        "todas": "Todas",
+        "claro": "Claro",
+        "escuro": "Escuro",
+        "venda": "VENDA",
+        "transferencia": "TRANSFERÊNCIA",
+        "transferência": "TRANSFERÊNCIA",
+        "transf": "TRANSFERÊNCIA",
+        "aba": "ABA",
+        "pendentes": "Somente pendentes",
+        "somente pendentes": "Somente pendentes",
+        "com saida": "Somente com saída",
+        "com saída": "Somente com saída",
+        "somente com saida": "Somente com saída",
+        "somente com saída": "Somente com saída",
+        "2h": "Até 2h para frente",
+        "ate 2h": "Até 2h para frente",
+        "até 2h": "Até 2h para frente",
+        "hoje": "Hoje",
+        "amanha": "Amanhã",
+        "amanhã": "Amanhã",
+        "dias anteriores": "Dias anteriores",
+        "todos ate amanha": "Todos até amanhã",
+        "todos até amanhã": "Todos até amanhã",
+    }
+    candidato = aliases.get(alvo, raw)
+    for i, opt in enumerate(options):
+        if normalizar_url_value(opt) == normalizar_url_value(candidato):
+            return i
+    return options.index(default_label) if default_label in options else 0
+
 # =========================
 # FUNÇÕES AUXILIARES
 # =========================
@@ -1175,29 +1229,38 @@ data_options = sorted(base["Janela"].dropna().dt.date.unique().tolist(), reverse
 data_labels = [d.strftime("%d/%m/%Y") for d in data_options]
 
 ctrl1, ctrl2, ctrl3, ctrl4, ctrl5, ctrl6, ctrl7, ctrl8, ctrl9, ctrl10 = st.columns([.85, 1.05, 1.15, .68, .82, .66, 1.12, .72, .86, .62])
+periodo_options = ["Todos até amanhã", "Até 2h para frente", "Hoje", "Amanhã", "Dias anteriores"]
+transp_options = ["Todas"] + sorted(base["Transportador"].dropna().astype(str).unique().tolist())
+turno_options = ["Todos"] + sorted(base["Turno"].dropna().astype(str).unique().tolist())
+status_options = ["Todos", "NO PRAZO", "AGUARDANDO", "PONTO DE ATENÇÃO", "ATRASO CHEGADA", "ATRASO SAÍDA"]
+doca_options = ["Todas"]
+if "Doca" in base.columns:
+    doca_options += sorted(base["Doca"].dropna().astype(str).unique().tolist())
+plano_options = ["Todos"] + sorted(base["Plano de Transporte"].dropna().astype(str).unique().tolist())
+modal_options = ["Todos"] + sorted(base["Modal"].dropna().astype(str).unique().tolist())
+saida_options = ["Todas", "Somente pendentes", "Somente com saída"]
+tema_options = ["Claro", "Escuro"]
+
 with ctrl1:
-    periodo_sel = st.selectbox("Período", ["Todos até amanhã", "Até 2h para frente", "Hoje", "Amanhã", "Dias anteriores"], label_visibility="visible")
+    periodo_sel = st.selectbox("Período", periodo_options, index=escolher_por_query(periodo_options, "periodo", "Todos até amanhã"), label_visibility="visible")
 with ctrl2:
     datas_janela_sel = st.multiselect("Data Janela", data_labels, placeholder="Todas")
 with ctrl3:
-    transp_sel = st.selectbox("Transportadora", ["Todas"] + sorted(base["Transportador"].dropna().astype(str).unique().tolist()), label_visibility="visible")
+    transp_sel = st.selectbox("Transportadora", transp_options, index=escolher_por_query(transp_options, "transportadora", "Todas"), label_visibility="visible")
 with ctrl4:
-    turno_sel = st.selectbox("Turno", ["Todos"] + sorted(base["Turno"].dropna().astype(str).unique().tolist()), label_visibility="visible")
+    turno_sel = st.selectbox("Turno", turno_options, index=escolher_por_query(turno_options, "turno", "Todos"), label_visibility="visible")
 with ctrl5:
-    status_sel = st.selectbox("Status", ["Todos", "NO PRAZO", "AGUARDANDO", "PONTO DE ATENÇÃO", "ATRASO CHEGADA", "ATRASO SAÍDA"], label_visibility="visible")
+    status_sel = st.selectbox("Status", status_options, index=escolher_por_query(status_options, "status", "Todos"), label_visibility="visible")
 with ctrl6:
-    doca_options = ["Todas"]
-    if "Doca" in base.columns:
-        doca_options += sorted(base["Doca"].dropna().astype(str).unique().tolist())
-    doca_sel = st.selectbox("Doca", doca_options, label_visibility="visible")
+    doca_sel = st.selectbox("Doca", doca_options, index=escolher_por_query(doca_options, "doca", "Todas"), label_visibility="visible")
 with ctrl7:
-    plano_sel = st.selectbox("Plano de Transporte", ["Todos"] + sorted(base["Plano de Transporte"].dropna().astype(str).unique().tolist()), label_visibility="visible")
+    plano_sel = st.selectbox("Plano de Transporte", plano_options, index=escolher_por_query(plano_options, "plano", "Todos"), label_visibility="visible")
 with ctrl8:
-    modal_sel = st.selectbox("Modal", ["Todos"] + sorted(base["Modal"].dropna().astype(str).unique().tolist()), label_visibility="visible")
+    modal_sel = st.selectbox("Modal", modal_options, index=escolher_por_query(modal_options, "modal", "Todos"), label_visibility="visible")
 with ctrl9:
-    saida_sel = st.selectbox("Saída", ["Todas", "Somente pendentes", "Somente com saída"], label_visibility="visible")
+    saida_sel = st.selectbox("Saída", saida_options, index=escolher_por_query(saida_options, "saida", "Todas"), label_visibility="visible")
 with ctrl10:
-    tema = st.selectbox("Tema", ["Claro", "Escuro"], key="tema_select", label_visibility="visible")
+    tema = st.selectbox("Tema", tema_options, index=escolher_por_query(tema_options, "tema", st.session_state.get("tema_select", "Claro")), key="tema_select", label_visibility="visible")
 
 with st.expander("⚙️ Configurar tempos de alerta e atualização", expanded=False):
     ac1, ac2, ac3, ac4 = st.columns(4)
@@ -1275,10 +1338,11 @@ with st.expander("📦 Status das cargas por dia", expanded=True):
     ps1, ps2, ps3 = st.columns([1, 1, 1.4])
     with ps1:
         modal_status_options = ["Todos"] + sorted(base["Modal"].dropna().astype(str).unique().tolist())
-        modal_status_sel = st.selectbox("Modal do painel status", modal_status_options, index=modal_status_options.index("VENDA") if "VENDA" in modal_status_options else 0, key="modal_status_dia")
+        modal_default = "VENDA" if "VENDA" in modal_status_options else "Todos"
+        modal_status_sel = st.selectbox("Modal do painel status", modal_status_options, index=escolher_por_query(modal_status_options, "modal_status", modal_default), key="modal_status_dia")
     with ps2:
         turno_status_options = ["Todos"] + sorted(base["Turno"].dropna().astype(str).unique().tolist())
-        turno_status_sel = st.selectbox("Turno do painel status", turno_status_options, key="turno_status_dia")
+        turno_status_sel = st.selectbox("Turno do painel status", turno_status_options, index=escolher_por_query(turno_status_options, "turno_status", "Todos"), key="turno_status_dia")
     with ps3:
         datas_status = sorted(base.loc[base["Janela"].notna(), "Janela"].dt.date.unique(), reverse=True)
         datas_status_options = [pd.Timestamp(d).strftime("%d/%m/%Y") for d in datas_status]
