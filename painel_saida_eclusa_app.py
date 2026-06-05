@@ -205,27 +205,39 @@ def parse_numero_br(series: pd.Series) -> pd.Series:
     """
     Converte números vindos do Excel/Google Sheets em formato BR ou US.
     Ex.: 12,5 -> 12.5 | 1.234,56 -> 1234.56 | 12.5 -> 12.5.
-    Evita que valores de M³ vindos como texto com vírgula virem zero.
+    Evita erro quando o valor vem como número, vazio, NaN ou texto.
     """
     if series is None:
         return pd.Series(dtype="float64")
-    if pd.api.types.is_numeric_dtype(series):
-        return pd.to_numeric(series, errors="coerce").fillna(0)
 
-    s = series.astype(str).str.strip()
-    s = s.replace({"": "0", "nan": "0", "None": "0", "-": "0"})
-    # remove espaços e símbolos, mantendo dígitos, vírgula, ponto e sinal
-    s = s.str.replace(r"[^0-9,.-]", "", regex=True)
-
-    def conv(x: str):
-        if not x or x in {"-", ",", "."}:
+    def conv(x):
+        # trata nulos
+        if pd.isna(x):
             return 0
-        # Quando tem vírgula, assume vírgula como decimal e ponto como milhar.
+
+        # se já for número, retorna direto
+        if isinstance(x, (int, float)):
+            return x
+
+        # força virar texto
+        x = str(x).strip()
+
+        if x in {"", "-", ",", ".", "nan", "None", "NaN", "<NA>"}:
+            return 0
+
+        # remove espaços e símbolos, mantendo dígitos, vírgula, ponto e sinal
+        x = re.sub(r"[^0-9,.-]", "", x)
+
+        if x in {"", "-", ",", "."}:
+            return 0
+
+        # formato brasileiro: 1.234,56 ou 12,5
         if "," in x:
             x = x.replace(".", "").replace(",", ".")
+
         return x
 
-    return pd.to_numeric(s.map(conv), errors="coerce").fillna(0)
+    return pd.to_numeric(series.map(conv), errors="coerce").fillna(0)
 
 
 # =========================
